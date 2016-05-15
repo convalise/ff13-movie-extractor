@@ -1,221 +1,339 @@
 
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
 
-//using Conrado;
+namespace com.convalise.FF13MovieExtractor
+{
 
-public class FileSplitter {
+public class FileSplitter
+{
+	/// <summary> The size of the buffer used to read the movie from the container. </summary>
+	private const int ReadBufferSize = 16 * 1024 * 1024;
+
+	/// <summary> The name of the text file the offset table will be dumped to. </summary>
+	private const string OffsetTableDumpFileName = "OffsetTable.txt";
+
+	/// <summary> The movie name list offset on the wdb file. </summary>
+	private const string MovieNameListOffset = "0090";
+
+	/// <summary> The movie name list length on the wdb file. </summary>
+	private const string MovieNameListLength = "0D40";
+
+	/// <summary> The container name list offset on the wdb file. </summary>
+	private const string ContainerNameListOffset = "0DD0";
+
+	/// <summary> The container name list length on the wdb file. </summary>
+	private const string ContainerNameListLength = "005A";
 
 
-	private const string hexMovieNameList = "0090";
-	private const string hexMovieNameListSize = "0D40";
 
-	private const string hexContainerNameList = "0DD0";
-//	private const string hexContainerNameListSize = "005A";
+	/// <summary> The path to the wdb database file. </summary>
+	public string DatabaseFilePath { get; private set; }
+
+	/// <summary> The path to the containers folder. </summary>
+	public string InputContainerFolder { get; private set; }
+	
+	/// <summary> The input container platform-based extension. </summary>
+	public string InputContainerExtension { get; private set; }
+
+	/// <summary> The path to the extracted movies folder. </summary>
+	public string OutputMovieFolder { get; private set; }
+
+	/// <summary> The output movie platform-based extension. </summary>
+	public string OutputMovieExtension { get; private set; }
+
+	/// <summary> The file sufix based on platform. </summary>
+	public string PlatformSufix { get; private set; }
+
+	/// <summary> The file sufix based on region. </summary>
+	public string RegionSufix { get; private set; }
 
 
-	private bool isAmerica;
-	private string inputFolder;
-	private string outputFolder;
-	private string inputVideoExtension;
-	private string outputVideoExtension;
 
+	public FileSplitter(string databaseFilePath)
+	{
+		this.DatabaseFilePath = databaseFilePath;
 
-	public static void Main(string[] args) {
+		string databaseFileName = Path.GetFileName(databaseFilePath);
+		string databaseDirectoryPath = Path.GetDirectoryName(databaseFilePath);
 
-		if(args.Length < 1) {
-			Console.Out.WriteLine("Usage: BinkSplitter movie_items_us.win32.wdb");
+		if(databaseFileName.Contains("win32"))
+		{
+			this.InputContainerExtension = ".win32.wmp";
+			this.OutputMovieExtension = ".bk2";
+			this.PlatformSufix = "_win32";
 		}
-		else {
-			new FileSplitter().Split(args.FirstOrDefault());
+		else if(databaseFileName.Contains("ps3"))
+		{
+			this.InputContainerExtension = ".ps3.wmp";
+			this.OutputMovieExtension = ".pamf";
+			this.PlatformSufix = "_ps3";
 		}
+		else if(databaseFileName.Contains("x360"))
+		{
+			this.InputContainerExtension = ".x360.wmp";
+			this.OutputMovieExtension = ".bik";
+			this.PlatformSufix = "_x360";
+		}
+		else
+		{
+			this.InputContainerExtension = string.Empty;
+			this.OutputMovieExtension = string.Empty;
+			this.PlatformSufix = string.Empty;
+		}
+
+		this.RegionSufix = databaseFileName.Contains("_us") ? "_us" : "";
+
+		this.InputContainerFolder = string.IsNullOrEmpty(databaseDirectoryPath) ? string.Empty : databaseDirectoryPath.Replace("\\", "/") + "/";
+		this.OutputMovieFolder = "extracted" + this.PlatformSufix + this.RegionSufix + "/";
 
 	}
 
-
-	public FileSplitter() {
-
-	}
-
-
-	public void Split(string databaseFilePath) {
-
-
-		if(Path.GetFileName(databaseFilePath).Contains("win32")) {
-			inputVideoExtension = ".win32.wmp";
-			outputVideoExtension = ".bk2";
-		}
-		else if(Path.GetFileName(databaseFilePath).Contains("ps3")) {
-			inputVideoExtension = ".ps3.wmp";
-			outputVideoExtension = ".pamf";
-		}
-		else if(Path.GetFileName(databaseFilePath).Contains("x360")) {
-			inputVideoExtension = ".x360.wmp";
-			outputVideoExtension = ".bik";
+	/// <summary>
+	/// Parses all movies information from the wdb database file.
+	/// </summary>
+	public Movie[] ReadDatabase()
+	{
+		if(!File.Exists(DatabaseFilePath))
+		{
+			System.Console.Error.WriteLine("File \"" + DatabaseFilePath + "\" not found!");
+			return new Movie[0];
 		}
 
-		inputFolder = Path.GetDirectoryName(databaseFilePath);
-		if(!string.IsNullOrEmpty(inputFolder))
-			inputFolder = inputFolder.Replace("\\", "/") + "/";
-
-		isAmerica = Path.GetFileName(databaseFilePath).Contains("us");
-		outputFolder = isAmerica ? "extracted_us/" : "extracted_jp/";
-
-
-		if(!File.Exists(databaseFilePath)) {
-			Console.Error.WriteLine("File \"" + databaseFilePath + "\" not found");
-			return;
-		}
-
+		/// The collection of movie information.
 		List<Movie> movieList = new List<Movie>();
+
+		/// The byte array used for reading the file.
 		byte[] byteArray = new byte[16];
-		
-		using(FileStream inputStream = new FileStream(databaseFilePath, FileMode.Open, FileAccess.Read)) {
 
-			Console.Out.WriteLine("File \"" + databaseFilePath + "\" opened successfully");
-
-			if(!inputStream.CanSeek || !inputStream.CanRead) {
-				Console.Error.WriteLine("File cannot seek or read its content");
-				return;
+		using(FileStream inputStream = new FileStream(DatabaseFilePath, FileMode.Open, FileAccess.Read))
+		{
+			if(!inputStream.CanSeek || !inputStream.CanRead)
+			{
+				System.Console.Error.WriteLine("Could not seek or read the database file content!");
+				return new Movie[0];
 			}
 
+			/// Seeks to the beginning of the movies list info.
+			inputStream.Seek(MovieNameListOffset.ToBase64(), SeekOrigin.Begin);
 
-			inputStream.Seek(hexMovieNameList.ToBase64(), SeekOrigin.Begin);
-			
-//			long amountDataRead;
-			long amountDataLeft;
+			long amountDataRead = 0L;
+			long amountDataLeft = MovieNameListLength.ToBase64();
 
-			amountDataLeft = hexMovieNameListSize.ToBase64();
-
-			while(amountDataLeft > 0) {
-
+			/// First step: reads the name of the movies and their location info.
+			while(amountDataLeft > 0L)
+			{
 				Movie movie = new Movie();
 
-				amountDataLeft -= inputStream.Read(byteArray, 0, byteArray.Length);
-				movie.name = byteArray.ToUTF8String();
-				
-				amountDataLeft -= inputStream.Read(byteArray, 0, byteArray.Length);
-				movie.pos = byteArray.ToHexString(0, 4);
-				movie.size = byteArray.ToHexString(4, 4);
+				amountDataLeft -= inputStream.Read(byteArray, 0, 16);
+				movie.Name = byteArray.ToUTF8String(0, 16);
+
+				amountDataLeft -= inputStream.Read(byteArray, 0, 16);
+				movie.Offset = byteArray.ToHexString(0, 4);
+				movie.Length = byteArray.ToHexString(4, 4);
 
 				movieList.Add(movie);
 			}
 
-			for(int i = 0; i < movieList.Count; i++) {
+			/// Second step: reads the offset and length of movies inside the containers.
+			for(int i = 0; i < movieList.Count; i++)
+			{
 				Movie movie = movieList[i];
 
-				inputStream.Seek(movie.pos.ToBase64(), SeekOrigin.Begin);
+				inputStream.Seek(movie.Offset.ToBase64(), SeekOrigin.Begin);
+				inputStream.Read(byteArray, 0, 16);
 
-				inputStream.Read(byteArray, 0, byteArray.Length);
+				movie.Length = byteArray.ToHexString(4, 4);
+				movie.Offset = byteArray.ToHexString(12, 4);
 
-				movie.size = byteArray.ToHexString(4, 4);
-				movie.pos = byteArray.ToHexString(12, 4);
-
-				inputStream.Seek(hexContainerNameList.ToBase64(), SeekOrigin.Begin);
+				inputStream.Seek(ContainerNameListOffset.ToBase64(), SeekOrigin.Begin);
 				inputStream.Seek(byteArray.ToHexString(0, 4).ToBase64(), SeekOrigin.Current);
-				inputStream.Read(byteArray, 0, 5);
+				inputStream.Read(byteArray, 0, 4);
 
-				movie.container = byteArray.ToUTF8String(0, 5) + (isAmerica ? "_us" : "");
+				movie.Container = byteArray.ToUTF8String(0, 4) + RegionSufix;
 			}
 
+		} /// End of input stream.
+
+		System.Console.Out.WriteLine("Database read completed.");
+
+		return movieList.ToArray();
+
+	}
+
+	/// <summary>
+	/// Dumps the movie database to a text file.
+	/// </summary>
+	public void DumpOffsetTable(Movie[] movieArray)
+	{
+		if((movieArray == null) || (movieArray.Length == 0))
+		{
+			System.Console.Error.WriteLine("Could not dump offset table: movie database is null or empty!");
+			return;
 		}
 
-//		movieList.OrderBy( movie => movie.container ).ToList().ForEach( movie => File.AppendAllText("files.txt", movie.container + " - " + movie.name.PadRight(11) + " - " + movie.pos + " - " + movie.size + " (" + (movie.size.ToBase64() / 1024d / 1024d).ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + " MB)" + Environment.NewLine) );
+		StringBuilder infoTable = new StringBuilder();
 
-		byteArray = new byte[64 * 1024 * 1024];
-		
-		foreach(var container in movieList.GroupBy( movie => movie.container ).OrderBy( container => container.Key )) {
+		infoTable.Append("Container       ");
+		infoTable.Append(" ");
+		infoTable.Append("Movie           ");
+		infoTable.Append(" ");
+		infoTable.Append("Offset          ");
+		infoTable.Append(" ");
+		infoTable.Append("Length                          ");
+		infoTable.AppendLine();
 
-			string inputFilePath = inputFolder + container.Key + inputVideoExtension;
+		infoTable.Append("----------------");
+		infoTable.Append(" ");
+		infoTable.Append("----------------");
+		infoTable.Append(" ");
+		infoTable.Append("----------------");
+		infoTable.Append(" ");
+		infoTable.Append("--------------------------------");
+		infoTable.AppendLine();
 
-			Console.Out.WriteLine("Reading container \"" + inputFilePath + "\"");
+		foreach(var movie in movieArray.OrderBy( movie => movie.Container ).ThenBy( movie => movie.Offset.ToBase64() ))
+		{
+			infoTable.Append(movie.Container.PadRight(16));
+			infoTable.Append(" ");
+			infoTable.Append(movie.Name.PadRight(16));
+			infoTable.Append(" ");
+			infoTable.Append("0x");
+			infoTable.Append(movie.Offset.PadRight(14));
+			infoTable.Append(" ");
+			infoTable.Append("0x");
+			infoTable.Append(movie.Length.PadRight(14));
+			infoTable.Append((movie.Length.ToBase64() / 1024D / 1024D).ToString("F2", System.Globalization.CultureInfo.InvariantCulture).PadLeft(13));
+			infoTable.Append(" MB");
+			infoTable.AppendLine();
+		}
 
-			if(!File.Exists(inputFilePath)) {
-				Console.Error.WriteLine("File \"" + inputFilePath + "\" not found");
+		File.WriteAllText(OffsetTableDumpFileName, infoTable.ToString());
+
+		System.Console.Out.WriteLine("Offset table dumped to file \"" + OffsetTableDumpFileName + "\".");
+	}
+
+	/// <summary>
+	/// Dumps the movies from the containers.
+	/// </summary>
+	public void DumpMovies(Movie[] movieArray)
+	{
+		if((movieArray == null) || (movieArray.Length == 0))
+		{
+			System.Console.Error.WriteLine("Could not dump movies: movie database is null or empty!");
+			return;
+		}
+
+		/// The byte array used for reading the file.
+		byte[] byteArray = new byte[ReadBufferSize];
+
+		/// The error counter.
+		int errorCount = 0;
+
+		if(!Directory.Exists(OutputMovieFolder))
+		{
+			Directory.CreateDirectory(OutputMovieFolder);
+		}
+
+		/// Will read movies grouped by their container for efficiency.
+		foreach(var container in movieArray.GroupBy( movie => movie.Container ).OrderBy( container => container.Key ))
+		{
+			string inputContainerPath = Path.Combine(InputContainerFolder, container.Key + InputContainerExtension);
+
+			if(!File.Exists(inputContainerPath))
+			{
+				System.Console.Error.WriteLine("Container \"" + inputContainerPath + "\" not found!");
+				errorCount++;
 				continue;
 			}
 
-			using(FileStream inputStream = File.OpenRead(inputFilePath)) {
+			using(FileStream inputStream = new FileStream(inputContainerPath, FileMode.Open, FileAccess.Read))
+			{
+				System.Console.Out.WriteLine("Opening container \"" + inputContainerPath + "\" for reading.");
 
-				if(!inputStream.CanSeek || !inputStream.CanRead) {
-					Console.Error.WriteLine("File cannot seek or read its content");
+				if(!inputStream.CanSeek || !inputStream.CanRead)
+				{
+					System.Console.Error.WriteLine("Could not seek or read the container file content!");
+					errorCount++;
 					continue;
 				}
 
-				long amountDataRead;
-				long amountDataLeft;
-				double totalData;
-				double currentData;
-				int count = 0;
+				/// Will read movies ordered by their offset for a sequential reading attempt.
+				foreach(Movie movie in container.OrderBy( movie => movie.Offset.ToBase64() ))
+				{
+					System.Console.Out.Write("--extracting file \"" + movie.Name + "\"");
 
-				foreach(Movie movie in container.OrderBy( movie => movie.pos.ToBase64() )) {
+					string outputMoviePath = Path.Combine(OutputMovieFolder, movie.Name + OutputMovieExtension);
 
-					Console.Out.Write("--extracting file " + movie.name);
+					/// Seeks to the beginning of the movie data, if needed.
+					if(inputStream.Position != movie.Offset.ToBase64())
+					{
+						inputStream.Seek(movie.Offset.ToBase64(), SeekOrigin.Begin);
+					}
 
-					string outputFilePath = outputFolder + movie.name + outputVideoExtension;
-
-					if(!Directory.Exists(Path.GetDirectoryName(outputFilePath)))
-						Directory.CreateDirectory(Path.GetDirectoryName(outputFilePath));
-
-					inputStream.Seek(movie.pos.ToBase64(), SeekOrigin.Begin);
-					
-					amountDataRead = 0;
-					amountDataLeft = movie.size.ToBase64();
-					totalData = (double) amountDataLeft;
-					currentData = 0d;
-					count++;
-
-					using(FileStream outputStream = new FileStream(outputFilePath, FileMode.Create, FileAccess.Write)) {
-
-						while(amountDataLeft > 0) {
-
-							if(amountDataLeft < byteArray.Length)
-								amountDataRead = inputStream.Read(byteArray, 0, (int) amountDataLeft);
+					using(FileStream outputStream = new FileStream(outputMoviePath, FileMode.Create, FileAccess.Write))
+					{
+						long amountDataRead = 0L;
+						long amountDataLeft = movie.Length.ToBase64();
+						
+						long totalData = movie.Length.ToBase64();
+						long currentDataSum = 0L;
+						
+						while(amountDataLeft > 0L)
+						{
+							/// Reads a chunk of movie data.
+							if(amountDataLeft >= ReadBufferSize)
+							{
+								amountDataRead = inputStream.Read(byteArray, 0, ReadBufferSize);
+							}
 							else
-								amountDataRead = inputStream.Read(byteArray, 0, byteArray.Length);
+							{
+								amountDataRead = inputStream.Read(byteArray, 0, (int) amountDataLeft);
+							}
 
-							if(amountDataRead == 0)
+							if(amountDataRead == 0L)
+							{
 								break;
+							}
 
+							/// Writes the read chunk to the output file.
 							outputStream.Write(byteArray, 0, (int) amountDataRead);
 
 							amountDataLeft -= amountDataRead;
-							currentData += amountDataRead;
+							currentDataSum += amountDataRead;
 
-							Console.Out.Write('\r');
-							Console.Out.Write("--extracting file " + movie.name + ": " + ((currentData / totalData) * 100).ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + "%");
+							System.Console.Out.Write('\r');
+							System.Console.Out.Write("--extracting file \"" + movie.Name + "\": " + ((currentDataSum / (double) totalData) * 100).ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + "%");
 
 						}
 
-						if(amountDataLeft > 0) {
-							Console.Out.WriteLine(" EOF");
-						}
-						else {
-							Console.Out.Write('\r');
-							Console.Out.WriteLine("--extracting file " + movie.name + ": 100%    ");
+						/// Checks if there are missing data on the container.
+						if(amountDataLeft > 0L)
+						{
+							System.Console.Out.Write(" EOF!");
+							System.Console.Out.WriteLine();
+							errorCount++;
+							continue;
 						}
 
-					}
+						System.Console.Out.Write('\r');
+						System.Console.Out.Write("--extracting file \"" + movie.Name + "\": done    ");
+						System.Console.Out.WriteLine();
+
+					} /// End of output stream.
 
 				}
 
-			}
+			} /// End of input stream.
 
 		}
 
-	}
+		System.Console.Out.WriteLine("Extraction completed with " + errorCount.ToString() + " errors.");
 
-	
-	[Serializable]
-	private class Movie {
-		public string name;
-		public string container;
-		public string pos;
-		public string size;
 	}
-
 
 }
+
+} /// End of namespace.
