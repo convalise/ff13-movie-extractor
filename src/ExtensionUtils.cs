@@ -1,5 +1,5 @@
 
-namespace com.convalise.FF13MovieExtractor
+namespace com.convalise.Lib
 {
 
 public static class ExtensionUtils
@@ -94,7 +94,7 @@ public static class ExtensionUtils
 	/// <summary>
 	/// Converts a hex string to a base 8 decimal.
 	/// </summary>
-	public static byte ToBase8(this string hexString)
+	public static byte ToDecimal8(this string hexString)
 	{
 		return System.Convert.ToByte(hexString, 16);
 	}
@@ -102,7 +102,7 @@ public static class ExtensionUtils
 	/// <summary>
 	/// Converts a hex string to a base 16 decimal.
 	/// </summary>
-	public static short ToBase16(this string hexString)
+	public static short ToDecimal16(this string hexString)
 	{
 		return System.Convert.ToInt16(hexString, 16);
 	}
@@ -110,7 +110,7 @@ public static class ExtensionUtils
 	/// <summary>
 	/// Converts a hex string to a base 32 decimal.
 	/// </summary>
-	public static int ToBase32(this string hexString)
+	public static int ToDecimal32(this string hexString)
 	{
 		return System.Convert.ToInt32(hexString, 16);
 	}
@@ -118,7 +118,7 @@ public static class ExtensionUtils
 	/// <summary>
 	/// Converts a hex string to a base 64 decimal.
 	/// </summary>
-	public static long ToBase64(this string hexString)
+	public static long ToDecimal64(this string hexString)
 	{
 		return System.Convert.ToInt64(hexString, 16);
 	}

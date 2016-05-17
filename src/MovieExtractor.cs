@@ -8,7 +8,7 @@ public class MovieExtractor
 {
 	public static void Main(string[] args)
 	{
-		if((args.Length < 3) || !args[0].EndsWith(".wdb"))
+		if((args.Length < 2) || !args[0].EndsWith(".wdb"))
 		{
 			System.Console.Out.WriteLine();
 			System.Console.Out.WriteLine("usage: FF13MovieExtractor <wdb-file> [commands]");
@@ -25,13 +25,13 @@ public class MovieExtractor
 
 		Movie[] movieDatabase = fileSplitter.ReadDatabase();
 
-		//Dumps the offset table to a text file
+		/// Dumps the offset table to a text file
 		if(args.Contains("-dumpoffsettable"))
 		{
 			fileSplitter.DumpOffsetTable(movieDatabase);
 		}
 
-		//Dumps the movies from their containers
+		/// Dumps the movies from their containers
 		if(args.Contains("-dumpmovies"))
 		{
 			fileSplitter.DumpMovies(movieDatabase);

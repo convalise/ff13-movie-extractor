@@ -8,7 +8,7 @@ The latest version of .NET Framework can be found [here](https://www.microsoft.c
 
 ## Changelog
 
-**version 1.0.1** (May 14, 2016)
+**version 1.0.1** (May 16, 2016)
 - Added option to dump the offset table to a text file
 - Updated code for better matching the C# pattern
 - Migration to GitHub

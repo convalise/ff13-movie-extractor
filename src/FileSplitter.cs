@@ -1,4 +1,6 @@
 
+using com.convalise.Lib;
+
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -117,10 +119,10 @@ public class FileSplitter
 			}
 
 			/// Seeks to the beginning of the movies list info.
-			inputStream.Seek(MovieNameListOffset.ToBase64(), SeekOrigin.Begin);
+			inputStream.Seek(MovieNameListOffset.ToDecimal64(), SeekOrigin.Begin);
 
 			long amountDataRead = 0L;
-			long amountDataLeft = MovieNameListLength.ToBase64();
+			long amountDataLeft = MovieNameListLength.ToDecimal64();
 
 			/// First step: reads the name of the movies and their location info.
 			while(amountDataLeft > 0L)
@@ -142,14 +144,14 @@ public class FileSplitter
 			{
 				Movie movie = movieList[i];
 
-				inputStream.Seek(movie.Offset.ToBase64(), SeekOrigin.Begin);
+				inputStream.Seek(movie.Offset.ToDecimal64(), SeekOrigin.Begin);
 				inputStream.Read(byteArray, 0, 16);
 
 				movie.Length = byteArray.ToHexString(4, 4);
 				movie.Offset = byteArray.ToHexString(12, 4);
 
-				inputStream.Seek(ContainerNameListOffset.ToBase64(), SeekOrigin.Begin);
-				inputStream.Seek(byteArray.ToHexString(0, 4).ToBase64(), SeekOrigin.Current);
+				inputStream.Seek(ContainerNameListOffset.ToDecimal64(), SeekOrigin.Begin);
+				inputStream.Seek(byteArray.ToHexString(0, 4).ToDecimal64(), SeekOrigin.Current);
 				inputStream.Read(byteArray, 0, 4);
 
 				movie.Container = byteArray.ToUTF8String(0, 4) + RegionSufix;
@@ -194,7 +196,7 @@ public class FileSplitter
 		infoTable.Append("--------------------------------");
 		infoTable.AppendLine();
 
-		foreach(var movie in movieArray.OrderBy( movie => movie.Container ).ThenBy( movie => movie.Offset.ToBase64() ))
+		foreach(var movie in movieArray.OrderBy( movie => movie.Container ).ThenBy( movie => movie.Offset.ToDecimal64() ))
 		{
 			infoTable.Append(movie.Container.PadRight(16));
 			infoTable.Append(" ");
@@ -205,7 +207,7 @@ public class FileSplitter
 			infoTable.Append(" ");
 			infoTable.Append("0x");
 			infoTable.Append(movie.Length.PadRight(14));
-			infoTable.Append((movie.Length.ToBase64() / 1024D / 1024D).ToString("F2", System.Globalization.CultureInfo.InvariantCulture).PadLeft(13));
+			infoTable.Append((movie.Length.ToDecimal64() / 1024D / 1024D).ToString("F2", System.Globalization.CultureInfo.InvariantCulture).PadLeft(13));
 			infoTable.Append(" MB");
 			infoTable.AppendLine();
 		}
@@ -261,24 +263,24 @@ public class FileSplitter
 				}
 
 				/// Will read movies ordered by their offset for a sequential reading attempt.
-				foreach(Movie movie in container.OrderBy( movie => movie.Offset.ToBase64() ))
+				foreach(Movie movie in container.OrderBy( movie => movie.Offset.ToDecimal64() ))
 				{
 					System.Console.Out.Write("--extracting file \"" + movie.Name + "\"");
 
 					string outputMoviePath = Path.Combine(OutputMovieFolder, movie.Name + OutputMovieExtension);
 
 					/// Seeks to the beginning of the movie data, if needed.
-					if(inputStream.Position != movie.Offset.ToBase64())
+					if(inputStream.Position != movie.Offset.ToDecimal64())
 					{
-						inputStream.Seek(movie.Offset.ToBase64(), SeekOrigin.Begin);
+						inputStream.Seek(movie.Offset.ToDecimal64(), SeekOrigin.Begin);
 					}
 
 					using(FileStream outputStream = new FileStream(outputMoviePath, FileMode.Create, FileAccess.Write))
 					{
 						long amountDataRead = 0L;
-						long amountDataLeft = movie.Length.ToBase64();
+						long amountDataLeft = movie.Length.ToDecimal64();
 						
-						long totalData = movie.Length.ToBase64();
+						long totalData = movie.Length.ToDecimal64();
 						long currentDataSum = 0L;
 						
 						while(amountDataLeft > 0L)
